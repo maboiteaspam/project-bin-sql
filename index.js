@@ -126,7 +126,7 @@ program
       var knownBins = [
         'mysql',
         'C:\\wamp\\bin\\mysql\\mysql5.6.17\\bin\\mysql.exe',
-        'D:\\wamp\\bin\\mysql\\mysql5.6.17\\bin\\mysql.exe',
+        'D:\\wamp\\bin\\mysql\\mysql5.6.17\\bin\\mysql.exe'
       ];
       var found = false;
       var clucLine = (new Cluc());
@@ -250,12 +250,6 @@ program
       })
     });
 
-/*
-
- inquirer.prompt([/ * Pass your questions in here * /], function( answers ) {
-      // Use user feedback for... whatever!!
-    });
-*/
   });
 
 program
