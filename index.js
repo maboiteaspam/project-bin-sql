@@ -15,7 +15,9 @@ program
     (new Config()).load().get(env)
       .forEach(function(machine){
         var mysql = machine.mysql || {};
-        var command = 'mysql -u '+mysql.user;
+        var command = '';
+        command += (machine.profileData.mysql_bin_path||'mysql')+' ';
+        command += ' -u '+mysql.user;
         if(mysql.password){
           command += ' -p '+mysql.password;
         }
