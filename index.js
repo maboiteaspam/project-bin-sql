@@ -9,41 +9,55 @@ var inquirer = require("inquirer");
 program
   .version(pkg.version)
 
-  .command('import <env> [file]')
+  .command('import [env] [file]')
   .description('Import a SQL file to the database')
   .action(function (env, file) {
+
+    env = !env?'local':env;
+    file = !file?'data.sql':file;
+
     (new Config()).load().get(env)
       .forEach(function(machine){
-        var mysql = machine.mysql || {};
-        var command = '';
-        command += (machine.profileData.mysql_bin_path||'mysql')+' ';
-        command += ' -u '+mysql.user;
-        if(mysql.password){
-          command += ' -p '+mysql.password;
+        if(!machine.mysql || !machine.mysql.user){
+          console.error(machine)
+          console.error('skipped '+machine.machineId);
+        }else{
+
+          var mysql = machine.mysql;
+          var command = '';
+          command += (machine.profileData.mysql_bin_path||'mysql')+' ';
+
+          command += ' -u '+mysql.user;
+
+          if(mysql.password){
+            command += ' -p '+mysql.password;
+          }
+          if(mysql.host){
+            command += ' --host '+mysql.host;
+          }
+          if(mysql.import_options){
+            command += ' '+mysql.import_options+' ';
+          }
+          if(mysql.database){
+            command += ' '+mysql.database+' ';
+          }
+          command += ' < '+(file || mysql.default_file || 'data.sql');
+
+          new Cluc().stream(command, function(){
+            this.display();
+          }).run(new Cluc.transports.process(), function(){});
         }
-        if(mysql.host){
-          command += ' --host '+mysql.host;
-        }
-        if(mysql.import_options){
-          command += ' '+mysql.import_options+' ';
-        }
-        if(mysql.database){
-          command += ' '+mysql.database+' ';
-        }
-        command += ' < '+(file || mysql.default_file || 'data.sql');
-        var clucLine = new Cluc();
-        var transport = new (Cluc.transports.process)();
-        clucLine.stream(command, function(){
-          this.display();
-        });
-        transport.run(clucLine, function(){});
       });
   });
 
 program
-  .command('export <env> [file]')
+  .command('export [env] [file]')
   .description('Export a database to a SQL file')
   .action(function (env, file) {
+
+    env = !env?'local':env;
+    file = !file?'data.sql':file;
+
     (new Config()).load().get(env)
       .forEach(function(machine){
         var mysql = machine.mysql || {};
@@ -63,27 +77,29 @@ program
             command += ' --host '+mysql.host;
           }
           if(mysql.export_options){
-            command += ' '+mysql.export_options+' ';
+            command += ' '+mysql.export_options;
           }
-          command += ' '+ignoreTables.join(' ')+' ';
+          command += ' '+ignoreTables.join(' ');
           if(mysql.database){
-            command += ' '+mysql.database+' ';
+            command += ' '+mysql.database;
           }
-          command += ' > '+(file || mysql.default_file || 'data.sql');
-          var clucLine = new Cluc();
-          var transport = new (Cluc.transports.process)();
-          clucLine.stream(command, function(){
+          command += ' > '+(file || mysql.default_file);
+
+          new Cluc().stream(command, function(){
             this.spin(/.*/);
-          });
-          transport.run(clucLine, function(){});
+          }).run(new Cluc.transports.process(), function(){});
         });
       });
   });
 
 program
-  .command('export_schema <env> [file]')
+  .command('export_schema [env] [file]')
   .description('Export database schema to a SQL file')
   .action(function (env, file) {
+
+    env = !env?'local':env;
+    file = !file?'schema.sql':file;
+
     (new Config()).load().get(env)
       .forEach(function(machine){
         var mysql = machine.mysql || {};
@@ -110,13 +126,11 @@ program
           if(mysql.database){
             command += ' '+mysql.database+' ';
           }
-          command += ' > '+(file || mysql.default_schema_file || 'data.sql');
-          var clucLine = new Cluc();
-          var transport = new (Cluc.transports.process)();
-          clucLine.stream(command, function(){
+          command += ' > '+(file || mysql.default_schema_file);
+          (new Cluc()).stream(command, function(err){
+            if(err) console.error(err);
             this.spin(/.*/);
-          });
-          transport.run(clucLine, function(){});
+          }).run(new (Cluc.transports.process)());
         });
       });
   });
@@ -143,8 +157,8 @@ program
           });
         });
       });
-      new (Cluc.transports.process)().run(clucLine, function(){
-        then(found)
+      clucLine.run(new Cluc.transports.process(), function(){
+        then(found);
       });
     };
     var askForBin = function(then){
@@ -154,13 +168,11 @@ program
         message: "Enter path to mysql binary"
       }], function( answers ) {
         var found = false;
-        var clucLine = (new Cluc());
-        clucLine.stream(answers.bin+ ' --version ', function(){
+        (new Cluc()).stream(answers.bin+ ' --version ', function(){
           this.capture(/\s+(Ver.+)/i, null, function(matched){
             if(matched) found = matched;
           })
-        });
-        new (Cluc.transports.process)().run(clucLine, function(){
+        }).run(new (Cluc.transports.process)(), function(){
           if(!found){
             askForBin(then);
           }else{
@@ -185,23 +197,24 @@ program
       }
     };
 
-    var testCredentials = function(user,pwd,then){
+    var testCredentials = function(user, pwd, database, then){
       var local = (new Config()).load().get("local")[0];
       var cmd = local.profileData.mysql_bin_path+ ' -u '+user;
       if(pwd){
         cmd += ' -p '+pwd;
       }
+      if(database){
+        cmd += ' '+database;
+      }
       cmd += ' -e "SHOW DATABASES;" ';
       var found = false;
-      var clucLine = (new Cluc());
-      clucLine.stream(cmd, function(){
+      (new Cluc()).stream(cmd, function(){
         this.capture(/information_schema/i, null, function(){
           if(this.matched){
             found = true;
           }
         });
-      });
-      new (Cluc.transports.process)().run(clucLine, function(){
+      }).run(new (Cluc.transports.process)(), function(){
         then(found);
       });
     };
@@ -216,10 +229,15 @@ program
         name: "pwd",
         default:"",
         message: "Enter DB password"
+      },{
+        type: "input",
+        name: "database",
+        default:"",
+        message: "Enter DB name"
       }], function( answers ) {
-        testCredentials(answers.user, answers.pwd, function(found){
+        testCredentials(answers.user, answers.pwd, answers.database, function(found){
           if(found){
-            then(answers.user, answers.pwd);
+            then(answers.user, answers.pwd, answers.database);
           }else{
             askForCredentials(then);
           }
@@ -227,9 +245,11 @@ program
       });
     };
     var checkOrAskForCredentials = function(then){
-      var local = (new Config()).load().get("local");
+      var local = (new Config()).load().get("local")[0];
       if(!local.mysql){
         askForCredentials(then);
+      }else{
+        then(local.mysql.user, local.mysql.pwd, local.mysql.database);
       }
     };
 
@@ -237,20 +257,21 @@ program
       if(found!==true){
         (new Config()).load().setProfile("local", {
           mysql_bin_path:found,
-          mysqldump_bin_path:found.replace(/\/mysql/, "mysqldump")
+          mysqldump_bin_path:found.replace(/(mysql)(\.exe)?$/, 'mysqldump$2')
         }).write();
       }
-      checkOrAskForCredentials(function(user,pwd){
-        console.log("");
-        console.log("Login success, you can proceed now !");
+      checkOrAskForCredentials(function(user, pwd, database){
         (new Config()).load().setEnv("local", {
           mysql:{
             user:user,
             pwd:pwd,
+            database:database,
             host:"localhost"
           }
         }).write();
-      })
+        console.log("");
+        console.log("Login success, you can proceed now !");
+      });
     });
 
   });
@@ -285,17 +306,15 @@ function listTables(env, then){
         command += ' '+mysql.database+' ';
       }
       command += ' -e "SHOW TABLES;"';
-      var clucLine = new Cluc();
       var transport = new (Cluc.transports.process)();
-      clucLine.stream(command, function(){
+      (new Cluc()).stream(command, function(){
         this.capture(/^\s*([a-z0-9-_]+)\s*$/i, null, function(){
           if(this.matched && !this.matched[0].match(/Tables_in_/)){
             tables.push(this.matched[0]);
           }
         });
         this.spin(/.*/);
-      });
-      transport.run(clucLine, function(){
+      }).run(transport, function(){
         then(tables)
       });
     });
